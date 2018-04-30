@@ -14,6 +14,9 @@
 
 'use strict'
 
+// For live demos with dicey networks...stub out result.
+let standalone = true
+
 /**
  * @param args of the format:
  *           { "author" : string, 
@@ -24,7 +27,7 @@
 function main(args) {
     const build_id = args["build_id"]
 
-    if(!build_id || isNaN(build_id)) {
+    if (!build_id || isNaN(build_id)) {
         return { "error": "Expected build_id to be a numerical string." };
     }
 
@@ -32,23 +35,29 @@ function main(args) {
 
     const travisBuildURL = "https://api.travis-ci.org/repos/openwhisk/openwhisk/builds/" + build_id;
 
-    return new Promise(function (resolve, reject) {
-        request.get({
-            "url" : travisBuildURL,
-            "json" : true,
-            headers : {
-                "Accept": "application/vnd.travis-ci.2+json"
-            }
-        }, function (error, response, body) {
-            if(error) {
-                reject("error while fetching Travis log id");
-            } else {
-                // forwards the incoming arguments...
-                let result = args;
-                // ... after augmenting with job id
-                result["job_id"] = (body["jobs"][0]["id"]).toString();
-                resolve(result);
-            }
+    if (standalone) {
+        let result = args
+        result["job_id"] = "198265063"
+        return new Promise(resolve => setTimeout(()=> resolve(result),500));
+    } else {
+        return new Promise(function (resolve, reject) {
+            request.get({
+                "url": travisBuildURL,
+                "json": true,
+                headers: {
+                    "Accept": "application/vnd.travis-ci.2+json"
+                }
+            }, function (error, response, body) {
+                if (error) {
+                    reject("error while fetching Travis log id");
+                } else {
+                    // forwards the incoming arguments...
+                    let result = args;
+                    // ... after augmenting with job id
+                    result["job_id"] = (body["jobs"][0]["id"]).toString();
+                    resolve(result);
+                }
+            });
         });
-    });
+    }
 }

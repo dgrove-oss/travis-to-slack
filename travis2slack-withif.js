@@ -63,13 +63,16 @@ composer.let({ prDetails: null, authorSlackInfo: null },
     p => { prDetails = p },
     getAuthorSlackInfo(),
     p => { authorSlackInfo = p },
-    _ => prDetails,
-    composer.retry(3, `${prefix}/fetch.log.url`),
-    `${prefix}/analyze.log`,
-    p => Object.assign(p, prDetails, { authorSlackInfo: authorSlackInfo }),
-    `${prefix}/format.for.slack`,
-    composer.retain(composer.literal(slackConfig)),
-    ({ result, params }) => Object.assign(result, params),
-    `/whisk.system/slack/post`
-  )
+    composer.if(
+      _ => authorSlackInfo.userID !== undefined,
+      composer.sequence(
+        _ => prDetails,
+        composer.retry(3, `${prefix}/fetch.log.url`),
+        `${prefix}/analyze.log`,
+        p => Object.assign(p, prDetails, { authorSlackInfo: authorSlackInfo }),
+        `${prefix}/format.for.slack`,
+        composer.retain(composer.literal(slackConfig)),
+        ({ result, params }) => Object.assign(result, params),
+        `/whisk.system/slack/post`
+      )))
 )

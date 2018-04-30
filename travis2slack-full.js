@@ -35,7 +35,7 @@ if (slackConfig.token === undefined) {
  * At composition deployment time, the environment variable CLOUDANT_PACKAGE_BINDING
  * controls whether lookup is done against a bound Cloudant instance or author-map.json.
  */
-function getAuthorSlackInfo() {
+function getAuthorMapComposition() {
   const cloudantBinding = process.env['CLOUDANT_PACKAGE_BINDING'];
   if (cloudantBinding == undefined) {
     const fs = require('fs');
@@ -52,24 +52,37 @@ function getAuthorSlackInfo() {
   }
 }
 
-/*
- * Convert the output from a TravisCI webhook for PR testing to a Slack notification
- * to the author of the PR
- */
 composer.let({ prDetails: null, authorSlackInfo: null },
   composer.sequence(
+    `/whisk.system/utils/echo`,
     `${prefix}/extract`,
     `${prefix}/fetch.job.id`,
     p => { prDetails = p },
-    getAuthorSlackInfo(),
-    p => { authorSlackInfo = p },
-    _ => prDetails,
-    composer.retry(3, `${prefix}/fetch.log.url`),
-    `${prefix}/analyze.log`,
-    p => Object.assign(p, prDetails, { authorSlackInfo: authorSlackInfo }),
-    `${prefix}/format.for.slack`,
-    composer.retain(composer.literal(slackConfig)),
-    ({ result, params }) => Object.assign(result, params),
-    `/whisk.system/slack/post`
-  )
-)
+    composer.if(
+      _ => prDetails.pr_number == undefined,
+      _ => {
+        const msg = 'No PR number in TravisCI input; terminating computation';
+        console.log(msg);
+        return msg
+      },
+      composer.sequence(
+        getAuthorMapComposition(),
+        p => { authorSlackInfo = p },
+        composer.if(
+          _ => authorSlackInfo.userID == undefined,
+          _ => {
+            const msg = 'The PR author ' + prDetails.author + ' is not subscribed for notifications';
+            console.log(msg);
+            return msg
+          },
+          composer.sequence(
+            _ => prDetails,
+            composer.retry(3, `${prefix}/fetch.log.url`),
+            `${prefix}/analyze.log`,
+            p => Object.assign(p, prDetails, { authorSlackInfo: authorSlackInfo }),
+            `${prefix}/format.for.slack`,
+            composer.retain(composer.literal(slackConfig)),
+            ({ result, params }) => Object.assign(result, params),
+            `/whisk.system/slack/post`)
+        )))))
+
